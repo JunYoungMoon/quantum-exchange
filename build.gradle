@@ -26,6 +26,7 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'net.openhft:chronicle-map:3.21ea1'
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
@@ -34,4 +35,8 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    jvmArgs '--add-opens', 'java.base/java.lang=ALL-UNNAMED'
+    jvmArgs '--add-opens', 'java.base/java.nio=ALL-UNNAMED'
+    jvmArgs '--add-opens', 'java.base/sun.nio.ch=ALL-UNNAMED'
+    jvmArgs '--add-opens', 'jdk.management/com.sun.management.internal=ALL-UNNAMED'
 }

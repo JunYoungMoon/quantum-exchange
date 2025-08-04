@@ -1,6 +1,7 @@
 package quantum.exchange.engine;
 
 import quantum.exchange.memory.MmapOrderBookManager;
+import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.Order;
 import quantum.exchange.model.MarketData;
 import quantum.exchange.orderbook.OrderBook;
@@ -19,6 +20,7 @@ public class MatchingEngine implements Runnable {
     private static final Logger logger = LoggerFactory.getLogger(MatchingEngine.class);
     
     private final MmapOrderBookManager memoryManager;
+    private final InMemoryChronicleMapManager chronicleMapManager;
     private OrderQueue orderQueue;
     private TradeResultQueue tradeQueue;
     private final Map<String, OrderBook> orderBooks = new ConcurrentHashMap<>();
@@ -34,8 +36,9 @@ public class MatchingEngine implements Runnable {
     private volatile Thread processingThread;
     private int nextSymbolIndex = 0;
     
-    public MatchingEngine(MmapOrderBookManager memoryManager) {
+    public MatchingEngine(MmapOrderBookManager memoryManager, InMemoryChronicleMapManager chronicleMapManager) {
         this.memoryManager = memoryManager;
+        this.chronicleMapManager = chronicleMapManager;
         this.orderQueue = null;
         this.tradeQueue = null;
     }
@@ -44,6 +47,7 @@ public class MatchingEngine implements Runnable {
         if (initialized.compareAndSet(false, true)) {
             try {
                 memoryManager.initialize();
+                chronicleMapManager.initialize();
                 
                 this.orderQueue = new OrderQueue(memoryManager);
                 this.tradeQueue = new TradeResultQueue(memoryManager);
@@ -212,7 +216,7 @@ public class MatchingEngine implements Runnable {
         }
         
         int symbolIndex = nextSymbolIndex++;
-        OrderBook orderBook = new OrderBook(symbol, symbolIndex, memoryManager, tradeQueue);
+        OrderBook orderBook = new OrderBook(symbol, symbolIndex, chronicleMapManager, memoryManager.getBuffer(), tradeQueue);
         orderBooks.put(symbol, orderBook);
         symbolIndexMap.put(symbol, symbolIndex);
         

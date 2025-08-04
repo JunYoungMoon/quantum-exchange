@@ -2,6 +2,7 @@ package quantum.exchange.service;
 
 import quantum.exchange.engine.MatchingEngine;
 import quantum.exchange.memory.MmapOrderBookManager;
+import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.*;
 import quantum.exchange.orderbook.OrderBook;
 import org.slf4j.Logger;
@@ -21,6 +22,7 @@ public class ExchangeService {
     private static final String MMAP_FILE_PATH = "./data/exchange.mmap";
     
     private MmapOrderBookManager memoryManager;
+    private InMemoryChronicleMapManager chronicleMapManager;
     private MatchingEngine matchingEngine;
     private final AtomicLong orderIdGenerator = new AtomicLong(1);
     
@@ -28,7 +30,8 @@ public class ExchangeService {
     public void initialize() {
         try {
             memoryManager = new MmapOrderBookManager(MMAP_FILE_PATH);
-            matchingEngine = new MatchingEngine(memoryManager);
+            chronicleMapManager = new InMemoryChronicleMapManager();
+            matchingEngine = new MatchingEngine(memoryManager, chronicleMapManager);
             
             matchingEngine.initialize();
             matchingEngine.start();
@@ -45,6 +48,9 @@ public class ExchangeService {
         try {
             if (matchingEngine != null) {
                 matchingEngine.stop();
+            }
+            if (chronicleMapManager != null) {
+                chronicleMapManager.close();
             }
             if (memoryManager != null) {
                 memoryManager.close();

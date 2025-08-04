@@ -1,10 +1,11 @@
 package quantum.exchange.orderbook;
 
-import quantum.exchange.memory.MmapOrderBookManager;
+import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.memory.SharedMemoryLayout;
 import quantum.exchange.model.Order;
 import quantum.exchange.model.OrderSide;
 import quantum.exchange.model.PriceLevel;
+import quantum.exchange.model.Trade;
 import quantum.exchange.queue.TradeResultQueue;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -19,7 +20,7 @@ public class OrderBook {
     private final String symbol;
     private final int symbolIndex;
     private final int symbolHash;
-    private final MmapOrderBookManager memoryManager;
+    private final InMemoryChronicleMapManager chronicleMapManager;
     private final MappedByteBuffer buffer;
     private final TradeResultQueue tradeQueue;
     
@@ -32,12 +33,12 @@ public class OrderBook {
     private volatile long bestBidPrice = 0;
     private volatile long bestAskPrice = Long.MAX_VALUE;
     
-    public OrderBook(String symbol, int symbolIndex, MmapOrderBookManager memoryManager, TradeResultQueue tradeQueue) {
+    public OrderBook(String symbol, int symbolIndex, InMemoryChronicleMapManager chronicleMapManager, MappedByteBuffer buffer, TradeResultQueue tradeQueue) {
         this.symbol = symbol;
         this.symbolIndex = symbolIndex;
         this.symbolHash = symbol.hashCode();
-        this.memoryManager = memoryManager;
-        this.buffer = memoryManager.getBuffer();
+        this.chronicleMapManager = chronicleMapManager;
+        this.buffer = buffer;
         this.tradeQueue = tradeQueue;
         
         logger.info("OrderBook created for symbol: {} (index: {}, hash: {})", symbol, symbolIndex, symbolHash);
@@ -178,9 +179,20 @@ public class OrderBook {
             long buyOrderId = incomingOrder.getSide() == OrderSide.BUY ? incomingOrder.getOrderId() : resting.getOrderId();
             long sellOrderId = incomingOrder.getSide() == OrderSide.SELL ? incomingOrder.getOrderId() : resting.getOrderId();
             
-            Long tradeId = tradeQueue.offerTradeAndGetId(buyOrderId, sellOrderId, price, tradeQuantity, symbolHash);
-            if (tradeId != null) {
+            // Create trade and store in Chronicle Map
+            Trade trade = new Trade();
+            trade.setBuyOrderId(buyOrderId);
+            trade.setSellOrderId(sellOrderId);
+            trade.setPrice(price);
+            trade.setQuantity(tradeQuantity);
+            trade.setSymbolHash(symbolHash);
+            trade.setTimestamp(System.nanoTime());
+            
+            long tradeId = chronicleMapManager.addPendingTrade(trade);
+            if (tradeId > 0) {
                 trades.add(tradeId);
+                // Also offer to trade queue for backward compatibility
+                tradeQueue.offerTradeAndGetId(buyOrderId, sellOrderId, price, tradeQuantity, symbolHash);
             }
             
             remainingQuantity -= tradeQuantity;
@@ -188,6 +200,11 @@ public class OrderBook {
             
             if (resting.getQuantity() == 0) {
                 iterator.remove();
+                // Remove from Chronicle Map as order is fully filled
+                chronicleMapManager.removeUnfilledOrder(resting.getOrderId());
+            } else {
+                // Update quantity in Chronicle Map for partially filled order
+                chronicleMapManager.updateUnfilledOrderQuantity(resting.getOrderId(), resting.getQuantity());
             }
             
             updatePriceLevel(price, incomingOrder.getSide() == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY, -tradeQuantity);
@@ -200,6 +217,9 @@ public class OrderBook {
         Order partialOrder = createPartialOrder(order, quantity);
         bidOrders.computeIfAbsent(order.getPrice(), k -> new ArrayList<>()).add(partialOrder);
         
+        // Store unfilled order in Chronicle Map
+        chronicleMapManager.addUnfilledOrder(partialOrder);
+        
         PriceLevel level = bidLevels.computeIfAbsent(order.getPrice(), k -> new PriceLevel(k, 0, 0));
         level.addOrder(quantity);
         
@@ -209,6 +229,9 @@ public class OrderBook {
     private void addSellOrder(Order order, long quantity) {
         Order partialOrder = createPartialOrder(order, quantity);
         askOrders.computeIfAbsent(order.getPrice(), k -> new ArrayList<>()).add(partialOrder);
+        
+        // Store unfilled order in Chronicle Map
+        chronicleMapManager.addUnfilledOrder(partialOrder);
         
         PriceLevel level = askLevels.computeIfAbsent(order.getPrice(), k -> new PriceLevel(k, 0, 0));
         level.addOrder(quantity);

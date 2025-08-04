@@ -2,6 +2,7 @@ package quantum.exchange.performance;
 
 import quantum.exchange.engine.MatchingEngine;
 import quantum.exchange.memory.MmapOrderBookManager;
+import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.Order;
 import quantum.exchange.model.OrderSide;
 import quantum.exchange.model.OrderType;
@@ -23,6 +24,7 @@ public class PerformanceBenchmark {
     private static final int BENCHMARK_ORDERS = 100_000;
     
     private MmapOrderBookManager memoryManager;
+    private InMemoryChronicleMapManager chronicleMapManager;
     private MatchingEngine matchingEngine;
     private Random random;
     
@@ -31,7 +33,8 @@ public class PerformanceBenchmark {
         java.nio.file.Files.createDirectories(java.nio.file.Paths.get("./test-data"));
         
         memoryManager = new MmapOrderBookManager(TEST_MMAP_FILE);
-        matchingEngine = new MatchingEngine(memoryManager);
+        chronicleMapManager = new InMemoryChronicleMapManager();
+        matchingEngine = new MatchingEngine(memoryManager, chronicleMapManager);
         matchingEngine.initialize();
         matchingEngine.start();
         
@@ -44,6 +47,9 @@ public class PerformanceBenchmark {
     void tearDown() throws Exception {
         if (matchingEngine != null) {
             matchingEngine.stop();
+        }
+        if (chronicleMapManager != null) {
+            chronicleMapManager.close();
         }
         if (memoryManager != null) {
             memoryManager.close();

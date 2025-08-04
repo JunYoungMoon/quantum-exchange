@@ -1,6 +1,7 @@
 package quantum.exchange.engine;
 
 import quantum.exchange.memory.MmapOrderBookManager;
+import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.Order;
 import quantum.exchange.model.OrderSide;
 import quantum.exchange.model.OrderType;
@@ -17,6 +18,7 @@ public class MatchingEngineTest {
     private static final String TEST_SYMBOL = "BTC/USD";
     
     private MmapOrderBookManager memoryManager;
+    private InMemoryChronicleMapManager chronicleMapManager;
     private MatchingEngine matchingEngine;
     
     @BeforeEach
@@ -24,7 +26,8 @@ public class MatchingEngineTest {
         java.nio.file.Files.createDirectories(java.nio.file.Paths.get("./test-data"));
         
         memoryManager = new MmapOrderBookManager(TEST_MMAP_FILE);
-        matchingEngine = new MatchingEngine(memoryManager);
+        chronicleMapManager = new InMemoryChronicleMapManager();
+        matchingEngine = new MatchingEngine(memoryManager, chronicleMapManager);
         matchingEngine.initialize();
         matchingEngine.start();
         
@@ -35,6 +38,9 @@ public class MatchingEngineTest {
     void tearDown() throws Exception {
         if (matchingEngine != null) {
             matchingEngine.stop();
+        }
+        if (chronicleMapManager != null) {
+            chronicleMapManager.close();
         }
         if (memoryManager != null) {
             memoryManager.close();
