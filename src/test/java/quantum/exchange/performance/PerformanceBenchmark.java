@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
 public class PerformanceBenchmark {
     
     private static final String TEST_MMAP_FILE = "./test-data/benchmark.mmap";
-    private static final String TEST_SYMBOL = "BTC/USD";
+    private static final String TEST_SYMBOL = "BTC-USD";
     private static final int WARMUP_ORDERS = 10_000;
     private static final int BENCHMARK_ORDERS = 100_000;
     

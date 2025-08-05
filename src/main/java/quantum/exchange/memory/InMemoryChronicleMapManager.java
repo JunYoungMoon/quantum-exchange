@@ -1,9 +1,8 @@
 package quantum.exchange.memory;
 
+import lombok.extern.slf4j.Slf4j;
 import quantum.exchange.model.Order;
 import quantum.exchange.model.Trade;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
@@ -11,11 +10,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * In-memory implementation of Chronicle Map functionality for testing and development.
- * This avoids the complex JVM access requirements of Chronicle Map during testing.
+ * 테스트 및 개발을 위한 Chronicle Map 기능의 인메모리 구현체
+ * 테스트 중 Chronicle Map의 복잡한 JVM 접근 요구사항을 회피한다.
  */
+@Slf4j
 public class InMemoryChronicleMapManager implements AutoCloseable {
-    private static final Logger logger = LoggerFactory.getLogger(InMemoryChronicleMapManager.class);
     
     private final ConcurrentHashMap<Long, Order> unfilledOrdersMap = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<Long, Trade> pendingTradesMap = new ConcurrentHashMap<>();
@@ -24,16 +23,16 @@ public class InMemoryChronicleMapManager implements AutoCloseable {
     private final AtomicLong nextOrderId = new AtomicLong(1);
     private final AtomicLong nextTradeId = new AtomicLong(1);
     
-    // In-memory indexes for fast lookups
+    // 빠른 조회를 위한 인메모리 인덱스
     private final ConcurrentHashMap<String, ConcurrentHashMap<Long, Long>> symbolPriceIndex = new ConcurrentHashMap<>();
     
     public void initialize() throws IOException {
         if (initialized.compareAndSet(false, true)) {
-            logger.info("InMemoryChronicleMapManager initialized successfully");
+            log.info("인메모리 크로니클 맵 매니저 초기화 성공");
         }
     }
     
-    // Unfilled Orders Management
+    // 미체결 주문 관리
     public boolean addUnfilledOrder(Order order) {
         ensureInitialized();
         
@@ -53,7 +52,7 @@ public class InMemoryChronicleMapManager implements AutoCloseable {
             
             return true;
         } catch (Exception e) {
-            logger.error("Failed to add unfilled order: {}", order.getOrderId(), e);
+            log.error("미체결 주문 추가 실패: {}", order.getOrderId(), e);
             return false;
         }
     }
@@ -108,7 +107,7 @@ public class InMemoryChronicleMapManager implements AutoCloseable {
         return new ConcurrentHashMap<>();
     }
     
-    // Pending Trades Management
+    // 대기 중인 거래 관리
     public long addPendingTrade(Trade trade) {
         ensureInitialized();
         
@@ -123,7 +122,7 @@ public class InMemoryChronicleMapManager implements AutoCloseable {
             pendingTradesMap.put(tradeId, trade);
             return tradeId;
         } catch (Exception e) {
-            logger.error("Failed to add pending trade: {}", tradeId, e);
+            log.error("대기 중인 거래 추가 실패: {}", tradeId, e);
             return -1;
         }
     }
@@ -143,14 +142,14 @@ public class InMemoryChronicleMapManager implements AutoCloseable {
         
         Trade trade = pendingTradesMap.get(tradeId);
         if (trade != null) {
-            // Note: Trade model doesn't have status field, but method exists for API compatibility
+            // 참고: Trade 모델에는 상태 필드가 없지만 API 호환성을 위해 메서드 존재
             pendingTradesMap.put(tradeId, trade);
             return true;
         }
         return false;
     }
     
-    // Utility Methods
+    // 유틸리티 메서드
     public long getUnfilledOrdersCount() {
         ensureInitialized();
         return unfilledOrdersMap.size();
@@ -170,7 +169,7 @@ public class InMemoryChronicleMapManager implements AutoCloseable {
     }
     
     public void force() {
-        // No-op for in-memory implementation
+        // 인메모리 구현에서는 아무 작업 없음
     }
     
     private void ensureInitialized() {
@@ -185,7 +184,7 @@ public class InMemoryChronicleMapManager implements AutoCloseable {
             unfilledOrdersMap.clear();
             pendingTradesMap.clear();
             symbolPriceIndex.clear();
-            logger.info("InMemoryChronicleMapManager closed");
+            log.info("인메모리 크로니클 맵 매니저 종료");
         }
     }
     

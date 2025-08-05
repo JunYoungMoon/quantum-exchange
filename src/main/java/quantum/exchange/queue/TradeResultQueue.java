@@ -3,14 +3,17 @@ package quantum.exchange.queue;
 import quantum.exchange.memory.MmapOrderBookManager;
 import quantum.exchange.memory.SharedMemoryLayout;
 import quantum.exchange.model.Trade;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.nio.MappedByteBuffer;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 거래 결과를 처리하는 큐
+ * 메모리 맵 파일을 사용하여 고성능 거래 결과 처리를 제공한다.
+ */
+@Slf4j
 public class TradeResultQueue {
-    private static final Logger logger = LoggerFactory.getLogger(TradeResultQueue.class);
     
     private final MmapOrderBookManager memoryManager;
     private final MappedByteBuffer buffer;
@@ -28,7 +31,7 @@ public class TradeResultQueue {
         localHead.set(memoryManager.getTradeQueueHead());
         localTail.set(memoryManager.getTradeQueueTail());
         initialized = true;
-        logger.info("TradeResultQueue initialized with head={}, tail={}", localHead.get(), localTail.get());
+        log.info("TradeResultQueue initialized with head={}, tail={}", localHead.get(), localTail.get());
     }
     
     public boolean offer(Trade trade) {
@@ -157,7 +160,7 @@ public class TradeResultQueue {
         localTail.set(0);
         memoryManager.setTradeQueueHead(0);
         memoryManager.setTradeQueueTail(0);
-        logger.info("TradeResultQueue cleared");
+        log.info("TradeResultQueue cleared");
     }
     
     public long getHead() {

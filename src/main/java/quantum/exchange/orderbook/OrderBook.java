@@ -4,18 +4,22 @@ import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.memory.SharedMemoryLayout;
 import quantum.exchange.model.Order;
 import quantum.exchange.model.OrderSide;
+import quantum.exchange.model.OrderType;
 import quantum.exchange.model.PriceLevel;
 import quantum.exchange.model.Trade;
 import quantum.exchange.queue.TradeResultQueue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.nio.MappedByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 특정 심볼에 대한 호가창을 관리하는 클래스
+ * 매수/매도 주문을 가격 순으로 정렬하여 매칭을 수행한다.
+ */
+@Slf4j
 public class OrderBook {
-    private static final Logger logger = LoggerFactory.getLogger(OrderBook.class);
     
     private final String symbol;
     private final int symbolIndex;
@@ -27,8 +31,8 @@ public class OrderBook {
     private final TreeMap<Long, PriceLevel> bidLevels = new TreeMap<>(Collections.reverseOrder());
     private final TreeMap<Long, PriceLevel> askLevels = new TreeMap<>();
     
-    private final Map<Long, List<Order>> bidOrders = new ConcurrentHashMap<>();
-    private final Map<Long, List<Order>> askOrders = new ConcurrentHashMap<>();
+    private final Map<Long, LinkedOrderList> bidOrders = new ConcurrentHashMap<>();
+    private final Map<Long, LinkedOrderList> askOrders = new ConcurrentHashMap<>();
     
     private volatile long bestBidPrice = 0;
     private volatile long bestAskPrice = Long.MAX_VALUE;
@@ -41,14 +45,16 @@ public class OrderBook {
         this.buffer = buffer;
         this.tradeQueue = tradeQueue;
         
-        logger.info("OrderBook created for symbol: {} (index: {}, hash: {})", symbol, symbolIndex, symbolHash);
+        log.info("호가창 생성됨: {} (인덱스: {}, 해시: {})", symbol, symbolIndex, symbolHash);
     }
     
     public synchronized List<Long> processOrder(Order order) {
         List<Long> executedTrades = new ArrayList<>();
         
-        if (order.getType().name().equals("MARKET")) {
+        if (order.getType() == OrderType.MARKET) {
             executedTrades.addAll(processMarketOrder(order));
+        } else if (order.getType() == OrderType.MARKET_WITH_PRICE) {
+            executedTrades.addAll(processMarketOrderWithPrice(order));
         } else {
             executedTrades.addAll(processLimitOrder(order));
         }
@@ -69,7 +75,7 @@ public class OrderBook {
             for (Long price : askPrices) {
                 if (remainingQuantity <= 0) break;
                 
-                List<Order> ordersAtPrice = askOrders.get(price);
+                LinkedOrderList ordersAtPrice = askOrders.get(price);
                 if (ordersAtPrice == null || ordersAtPrice.isEmpty()) {
                     pricesToRemove.add(price);
                     continue;
@@ -80,6 +86,16 @@ public class OrderBook {
                 if (ordersAtPrice.isEmpty()) {
                     pricesToRemove.add(price);
                 }
+            }
+            
+            // Handle unfilled market buy orders - execute at highest available price
+            if (remainingQuantity > 0 && !askLevels.isEmpty()) {
+                long executionPrice = askLevels.lastKey(); // Highest available ask price
+                Order unfilledOrder = createPartialOrder(order, remainingQuantity);
+                unfilledOrder.setPrice(executionPrice);
+                chronicleMapManager.addUnfilledOrder(unfilledOrder);
+                log.info("시장가 매수 주문 {} 부분 미체결: {} 수량, 가격 {}", 
+                    order.getOrderId(), remainingQuantity, executionPrice);
             }
             
             // Remove empty price levels after iteration
@@ -94,7 +110,7 @@ public class OrderBook {
             for (Long price : bidPrices) {
                 if (remainingQuantity <= 0) break;
                 
-                List<Order> ordersAtPrice = bidOrders.get(price);
+                LinkedOrderList ordersAtPrice = bidOrders.get(price);
                 if (ordersAtPrice == null || ordersAtPrice.isEmpty()) {
                     pricesToRemove.add(price);
                     continue;
@@ -107,7 +123,94 @@ public class OrderBook {
                 }
             }
             
+            // Handle unfilled market sell orders - execute at lowest available price
+            if (remainingQuantity > 0 && !bidLevels.isEmpty()) {
+                long executionPrice = bidLevels.lastKey(); // Lowest available bid price
+                Order unfilledOrder = createPartialOrder(order, remainingQuantity);
+                unfilledOrder.setPrice(executionPrice);
+                chronicleMapManager.addUnfilledOrder(unfilledOrder);
+                log.info("시장가 매도 주문 {} 부분 미체결: {} 수량, 가격 {}", 
+                    order.getOrderId(), remainingQuantity, executionPrice);
+            }
+            
             // Remove empty price levels after iteration
+            for (Long price : pricesToRemove) {
+                bidLevels.remove(price);
+                bidOrders.remove(price);
+            }
+        }
+        
+        return trades;
+    }
+    
+    private List<Long> processMarketOrderWithPrice(Order order) {
+        List<Long> trades = new ArrayList<>();
+        long remainingQuantity = order.getQuantity();
+        List<Long> pricesToRemove = new ArrayList<>();
+        long priceLimit = order.getPrice();
+        
+        if (order.getSide() == OrderSide.BUY) {
+            // Buy orders: only execute at or below the specified price limit
+            List<Long> askPrices = new ArrayList<>(askLevels.keySet());
+            
+            for (Long price : askPrices) {
+                if (remainingQuantity <= 0 || price > priceLimit) break;
+                
+                LinkedOrderList ordersAtPrice = askOrders.get(price);
+                if (ordersAtPrice == null || ordersAtPrice.isEmpty()) {
+                    pricesToRemove.add(price);
+                    continue;
+                }
+                
+                remainingQuantity = executeOrdersAtPrice(order, ordersAtPrice, price, remainingQuantity, trades);
+                
+                if (ordersAtPrice.isEmpty()) {
+                    pricesToRemove.add(price);
+                }
+            }
+            
+            // Handle unfilled quantity - store as unfilled order with price limit
+            if (remainingQuantity > 0) {
+                Order unfilledOrder = createPartialOrder(order, remainingQuantity);
+                unfilledOrder.setPrice(priceLimit);
+                chronicleMapManager.addUnfilledOrder(unfilledOrder);
+                log.info("가격 제한 시장 주문 {} 부분 미체결: {} 수량, 최대가격 {}", 
+                    order.getOrderId(), remainingQuantity, priceLimit);
+            }
+            
+            for (Long price : pricesToRemove) {
+                askLevels.remove(price);
+                askOrders.remove(price);
+            }
+        } else {
+            // Sell orders: only execute at or above the specified price limit  
+            List<Long> bidPrices = new ArrayList<>(bidLevels.keySet());
+            
+            for (Long price : bidPrices) {
+                if (remainingQuantity <= 0 || price < priceLimit) break;
+                
+                LinkedOrderList ordersAtPrice = bidOrders.get(price);
+                if (ordersAtPrice == null || ordersAtPrice.isEmpty()) {
+                    pricesToRemove.add(price);
+                    continue;
+                }
+                
+                remainingQuantity = executeOrdersAtPrice(order, ordersAtPrice, price, remainingQuantity, trades);
+                
+                if (ordersAtPrice.isEmpty()) {
+                    pricesToRemove.add(price);
+                }
+            }
+            
+            // Handle unfilled quantity - store as unfilled order with price limit
+            if (remainingQuantity > 0) {
+                Order unfilledOrder = createPartialOrder(order, remainingQuantity);
+                unfilledOrder.setPrice(priceLimit);
+                chronicleMapManager.addUnfilledOrder(unfilledOrder);
+                log.info("가격 제한 시장 주문 {} 부분 미체결: {} 수량, 최소가격 {}", 
+                    order.getOrderId(), remainingQuantity, priceLimit);
+            }
+            
             for (Long price : pricesToRemove) {
                 bidLevels.remove(price);
                 bidOrders.remove(price);
@@ -124,7 +227,7 @@ public class OrderBook {
         if (order.getSide() == OrderSide.BUY) {
             while (remainingQuantity > 0 && !askLevels.isEmpty() && askLevels.firstKey() <= order.getPrice()) {
                 long price = askLevels.firstKey();
-                List<Order> ordersAtPrice = askOrders.get(price);
+                LinkedOrderList ordersAtPrice = askOrders.get(price);
                 if (ordersAtPrice == null || ordersAtPrice.isEmpty()) {
                     askLevels.remove(price);
                     askOrders.remove(price);
@@ -145,7 +248,7 @@ public class OrderBook {
         } else {
             while (remainingQuantity > 0 && !bidLevels.isEmpty() && bidLevels.firstKey() >= order.getPrice()) {
                 long price = bidLevels.firstKey();
-                List<Order> ordersAtPrice = bidOrders.get(price);
+                LinkedOrderList ordersAtPrice = bidOrders.get(price);
                 if (ordersAtPrice == null || ordersAtPrice.isEmpty()) {
                     bidLevels.remove(price);
                     bidOrders.remove(price);
@@ -168,7 +271,7 @@ public class OrderBook {
         return trades;
     }
     
-    private long executeOrdersAtPrice(Order incomingOrder, List<Order> ordersAtPrice, long price, 
+    private long executeOrdersAtPrice(Order incomingOrder, LinkedOrderList ordersAtPrice, long price, 
                                       long remainingQuantity, List<Long> trades) {
         Iterator<Order> iterator = ordersAtPrice.iterator();
         
@@ -196,18 +299,30 @@ public class OrderBook {
             }
             
             remainingQuantity -= tradeQuantity;
-            resting.setQuantity(resting.getQuantity() - tradeQuantity);
             
-            if (resting.getQuantity() == 0) {
+            if (tradeQuantity == resting.getQuantity()) {
+                // Fully filled - remove order
                 iterator.remove();
-                // Remove from Chronicle Map as order is fully filled
                 chronicleMapManager.removeUnfilledOrder(resting.getOrderId());
+                // Update price level by removing the order completely
+                OrderSide restingSide = incomingOrder.getSide() == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY;
+                TreeMap<Long, PriceLevel> levels = (restingSide == OrderSide.BUY) ? bidLevels : askLevels;
+                PriceLevel level = levels.get(price);
+                if (level != null) {
+                    level.removeOrder(tradeQuantity);
+                    if (level.isEmpty()) {
+                        levels.remove(price);
+                    }
+                    updatePriceLevelInMemory(price, restingSide, level);
+                }
             } else {
-                // Update quantity in Chronicle Map for partially filled order
-                chronicleMapManager.updateUnfilledOrderQuantity(resting.getOrderId(), resting.getQuantity());
+                // Partially filled - update quantity using LinkedOrderList method
+                long newQuantity = resting.getQuantity() - tradeQuantity;
+                ordersAtPrice.updateOrderQuantity(resting.getOrderId(), newQuantity);
+                chronicleMapManager.updateUnfilledOrderQuantity(resting.getOrderId(), newQuantity);
+                // Update price level quantity only (don't change order count)
+                updatePriceLevel(price, incomingOrder.getSide() == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY, -tradeQuantity);
             }
-            
-            updatePriceLevel(price, incomingOrder.getSide() == OrderSide.BUY ? OrderSide.SELL : OrderSide.BUY, -tradeQuantity);
         }
         
         return remainingQuantity;
@@ -215,7 +330,7 @@ public class OrderBook {
     
     private void addBuyOrder(Order order, long quantity) {
         Order partialOrder = createPartialOrder(order, quantity);
-        bidOrders.computeIfAbsent(order.getPrice(), k -> new ArrayList<>()).add(partialOrder);
+        bidOrders.computeIfAbsent(order.getPrice(), k -> new LinkedOrderList()).addOrder(partialOrder);
         
         // Store unfilled order in Chronicle Map
         chronicleMapManager.addUnfilledOrder(partialOrder);
@@ -228,7 +343,7 @@ public class OrderBook {
     
     private void addSellOrder(Order order, long quantity) {
         Order partialOrder = createPartialOrder(order, quantity);
-        askOrders.computeIfAbsent(order.getPrice(), k -> new ArrayList<>()).add(partialOrder);
+        askOrders.computeIfAbsent(order.getPrice(), k -> new LinkedOrderList()).addOrder(partialOrder);
         
         // Store unfilled order in Chronicle Map
         chronicleMapManager.addUnfilledOrder(partialOrder);
@@ -259,7 +374,7 @@ public class OrderBook {
             if (quantityChange > 0) {
                 level.addOrder(quantityChange);
             } else {
-                level.removeOrder(-quantityChange);
+                level.updateQuantity(quantityChange); // Use updateQuantity instead of removeOrder
             }
             
             if (level.isEmpty()) {

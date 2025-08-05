@@ -1,7 +1,12 @@
 package quantum.exchange.model;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.nio.ByteBuffer;
 
+@Setter
+@Getter
 public class PriceLevel {
     public static final int BYTE_SIZE = Long.BYTES * 3;
     
@@ -41,19 +46,15 @@ public class PriceLevel {
         if (this.totalQuantity < 0) this.totalQuantity = 0;
     }
     
+    public void updateQuantity(long quantityChange) {
+        this.totalQuantity += quantityChange;
+        if (this.totalQuantity < 0) this.totalQuantity = 0;
+    }
+    
     public boolean isEmpty() {
         return orderCount == 0 || totalQuantity == 0;
     }
-    
-    public long getPrice() { return price; }
-    public void setPrice(long price) { this.price = price; }
-    
-    public long getTotalQuantity() { return totalQuantity; }
-    public void setTotalQuantity(long totalQuantity) { this.totalQuantity = totalQuantity; }
-    
-    public long getOrderCount() { return orderCount; }
-    public void setOrderCount(long orderCount) { this.orderCount = orderCount; }
-    
+
     @Override
     public String toString() {
         return String.format("PriceLevel{price=%d, qty=%d, orders=%d}",

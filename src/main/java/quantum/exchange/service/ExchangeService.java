@@ -1,12 +1,13 @@
 package quantum.exchange.service;
 
+import lombok.extern.slf4j.Slf4j;
+import quantum.exchange.dto.service.ExchangeStatus;
+import quantum.exchange.dto.service.OrderBookSnapshot;
 import quantum.exchange.engine.MatchingEngine;
 import quantum.exchange.memory.MmapOrderBookManager;
 import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.*;
 import quantum.exchange.orderbook.OrderBook;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
@@ -15,9 +16,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 거래소의 핵심 서비스 클래스
+ * 주문 처리, 매칭 엔진 관리, 시장 데이터 제공 등의 기능을 담당한다.
+ */
+@Slf4j
 @Service
 public class ExchangeService {
-    private static final Logger logger = LoggerFactory.getLogger(ExchangeService.class);
     
     private static final String MMAP_FILE_PATH = "./data/exchange.mmap";
     
@@ -26,9 +31,15 @@ public class ExchangeService {
     private MatchingEngine matchingEngine;
     private final AtomicLong orderIdGenerator = new AtomicLong(1);
     
+    /**
+     * 거래소 서비스를 초기화한다.
+     * 메모리 매니저, 크로니클 맵, 매칭 엔진을 설정한다.
+     */
     @PostConstruct
     public void initialize() {
         try {
+            log.info("거래소 서비스 초기화 시작");
+            
             memoryManager = new MmapOrderBookManager(MMAP_FILE_PATH);
             chronicleMapManager = new InMemoryChronicleMapManager();
             matchingEngine = new MatchingEngine(memoryManager, chronicleMapManager);
@@ -36,28 +47,38 @@ public class ExchangeService {
             matchingEngine.initialize();
             matchingEngine.start();
             
-            logger.info("ExchangeService initialized successfully");
+            log.info("거래소 서비스 초기화 성공");
         } catch (Exception e) {
-            logger.error("Failed to initialize ExchangeService", e);
-            throw new RuntimeException("Exchange initialization failed", e);
+            log.error("거래소 서비스 초기화 실패", e);
+            throw new RuntimeException("거래소 초기화 실패", e);
         }
     }
     
+    /**
+     * 거래소 서비스를 종료한다.
+     * 모든 리소스를 안전하게 다운한다.
+     */
     @PreDestroy
     public void shutdown() {
         try {
+            log.info("거래소 서비스 종료 시작");
+            
             if (matchingEngine != null) {
                 matchingEngine.stop();
+                log.debug("매칭 엔진 중지 완료");
             }
             if (chronicleMapManager != null) {
                 chronicleMapManager.close();
+                log.debug("크로니클 맵 매니저 종료 완료");
             }
             if (memoryManager != null) {
                 memoryManager.close();
+                log.debug("메모리 매니저 종료 완료");
             }
-            logger.info("ExchangeService shutdown completed");
+            
+            log.info("거래소 서비스 종료 완료");
         } catch (Exception e) {
-            logger.error("Error during ExchangeService shutdown", e);
+            log.error("거래소 서비스 종료 중 오류 발생", e);
         }
     }
     
@@ -76,40 +97,40 @@ public class ExchangeService {
     public Long submitMarketOrder(String symbol, OrderSide side, long quantity) {
         return submitOrder(symbol, side, OrderType.MARKET, 0, quantity);
     }
-    
+
     public Long submitLimitOrder(String symbol, OrderSide side, long price, long quantity) {
         return submitOrder(symbol, side, OrderType.LIMIT, price, quantity);
     }
     
     private boolean isValidOrder(String symbol, OrderSide side, OrderType type, long price, long quantity) {
         if (symbol == null || symbol.trim().isEmpty()) {
-            logger.warn("Invalid symbol: {}", symbol);
+            log.warn("잘못된 심볼: {}", symbol);
             return false;
         }
         
         if (side == null) {
-            logger.warn("Invalid order side: null");
+            log.warn("잘못된 주문 방향: null");
             return false;
         }
         
         if (type == null) {
-            logger.warn("Invalid order type: null");
+            log.warn("잘못된 주문 유형: null");
             return false;
         }
         
         if (quantity <= 0) {
-            logger.warn("Invalid quantity: {}", quantity);
+            log.warn("잘못된 수량: {}", quantity);
             return false;
         }
         
-        if (type == OrderType.LIMIT && price <= 0) {
-            logger.warn("Invalid limit order price: {}", price);
+        if ((type == OrderType.LIMIT || type == OrderType.MARKET_WITH_PRICE) && price <= 0) {
+            log.warn("잘못된 {} 주문 가격: {}", type, price);
             return false;
         }
         
         OrderBook orderBook = matchingEngine.getOrderBook(symbol);
         if (orderBook == null) {
-            logger.warn("Unknown symbol: {}", symbol);
+            log.warn("알 수 없는 심볼: {}", symbol);
             return false;
         }
         
@@ -150,12 +171,12 @@ public class ExchangeService {
         MatchingEngine.EngineStatistics stats = matchingEngine.getStatistics();
         return new ExchangeStatus(
                 matchingEngine.isRunning(),
-                stats.getProcessedOrders(),
-                stats.getProcessedTrades(),
+                stats.processedOrders(),
+                stats.processedTrades(),
                 stats.getLastProcessTimeMicros(),
-                stats.getOrderQueueSize(),
-                stats.getTradeQueueSize(),
-                stats.getSymbolCount(),
+                stats.orderQueueSize(),
+                stats.tradeQueueSize(),
+                stats.symbolCount(),
                 System.nanoTime()
         );
     }
@@ -166,67 +187,5 @@ public class ExchangeService {
     
     public boolean addSymbol(String symbol) {
         return matchingEngine.addSymbol(symbol);
-    }
-    
-    public static class OrderBookSnapshot {
-        private final String symbol;
-        private final List<PriceLevel> bidLevels;
-        private final List<PriceLevel> askLevels;
-        private final long bestBid;
-        private final long bestAsk;
-        private final long spread;
-        private final long timestamp;
-        
-        public OrderBookSnapshot(String symbol, List<PriceLevel> bidLevels, List<PriceLevel> askLevels,
-                               long bestBid, long bestAsk, long spread, long timestamp) {
-            this.symbol = symbol;
-            this.bidLevels = bidLevels;
-            this.askLevels = askLevels;
-            this.bestBid = bestBid;
-            this.bestAsk = bestAsk;
-            this.spread = spread;
-            this.timestamp = timestamp;
-        }
-        
-        public String getSymbol() { return symbol; }
-        public List<PriceLevel> getBidLevels() { return bidLevels; }
-        public List<PriceLevel> getAskLevels() { return askLevels; }
-        public long getBestBid() { return bestBid; }
-        public long getBestAsk() { return bestAsk; }
-        public long getSpread() { return spread; }
-        public long getTimestamp() { return timestamp; }
-    }
-    
-    public static class ExchangeStatus {
-        private final boolean running;
-        private final long processedOrders;
-        private final long processedTrades;
-        private final double avgProcessingTimeMicros;
-        private final long orderQueueSize;
-        private final long tradeQueueSize;
-        private final int symbolCount;
-        private final long timestamp;
-        
-        public ExchangeStatus(boolean running, long processedOrders, long processedTrades,
-                            double avgProcessingTimeMicros, long orderQueueSize, long tradeQueueSize,
-                            int symbolCount, long timestamp) {
-            this.running = running;
-            this.processedOrders = processedOrders;
-            this.processedTrades = processedTrades;
-            this.avgProcessingTimeMicros = avgProcessingTimeMicros;
-            this.orderQueueSize = orderQueueSize;
-            this.tradeQueueSize = tradeQueueSize;
-            this.symbolCount = symbolCount;
-            this.timestamp = timestamp;
-        }
-        
-        public boolean isRunning() { return running; }
-        public long getProcessedOrders() { return processedOrders; }
-        public long getProcessedTrades() { return processedTrades; }
-        public double getAvgProcessingTimeMicros() { return avgProcessingTimeMicros; }
-        public long getOrderQueueSize() { return orderQueueSize; }
-        public long getTradeQueueSize() { return tradeQueueSize; }
-        public int getSymbolCount() { return symbolCount; }
-        public long getTimestamp() { return timestamp; }
     }
 }

@@ -3,14 +3,17 @@ package quantum.exchange.queue;
 import quantum.exchange.memory.MmapOrderBookManager;
 import quantum.exchange.memory.SharedMemoryLayout;
 import quantum.exchange.model.Order;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.nio.MappedByteBuffer;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 주문을 처리하는 큐
+ * 메모리 맵 파일을 사용하여 고성능 주문 처리를 제공한다.
+ */
+@Slf4j
 public class OrderQueue {
-    private static final Logger logger = LoggerFactory.getLogger(OrderQueue.class);
     
     private final MmapOrderBookManager memoryManager;
     private final MappedByteBuffer buffer;
@@ -28,7 +31,7 @@ public class OrderQueue {
         localHead.set(memoryManager.getOrderQueueHead());
         localTail.set(memoryManager.getOrderQueueTail());
         initialized = true;
-        logger.info("OrderQueue initialized with head={}, tail={}", localHead.get(), localTail.get());
+        log.info("OrderQueue initialized with head={}, tail={}", localHead.get(), localTail.get());
     }
     
     public boolean offer(Order order) {
@@ -70,7 +73,7 @@ public class OrderQueue {
         
         // Validate order before returning
         if (order != null && !order.isValid()) {
-            logger.warn("Invalid order read from buffer at position {}: {}", currentHead, order);
+            log.warn("Invalid order read from buffer at position {}: {}", currentHead, order);
             // Skip this invalid order and move to next
             long nextHead = (currentHead + 1) % SharedMemoryLayout.ORDER_QUEUE_CAPACITY;
             localHead.set(nextHead);
@@ -154,7 +157,7 @@ public class OrderQueue {
         localTail.set(0);
         memoryManager.setOrderQueueHead(0);
         memoryManager.setOrderQueueTail(0);
-        logger.info("OrderQueue cleared");
+        log.info("OrderQueue cleared");
     }
     
     public long getHead() {

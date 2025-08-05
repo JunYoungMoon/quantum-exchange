@@ -1,7 +1,12 @@
 package quantum.exchange.model;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.nio.ByteBuffer;
 
+@Getter
+@Setter
 public class Order {
     public static final int BYTE_SIZE = Long.BYTES * 5 + Integer.BYTES * 3;
     
@@ -50,35 +55,16 @@ public class Order {
     
     public boolean isValid() {
         return orderId > 0 && quantity > 0 && timestamp > 0 && 
+               (type == OrderType.MARKET || type == OrderType.MARKET_WITH_PRICE || 
+                type == OrderType.LIMIT) && 
                (type == OrderType.MARKET || price > 0);
     }
-    
-    public long getOrderId() { return orderId; }
-    public void setOrderId(long orderId) { this.orderId = orderId; }
-    
-    public String getSymbol() { return symbol; }
-    public void setSymbol(String symbol) { 
+
+    public void setSymbol(String symbol) {
         this.symbol = symbol; 
         this.symbolHash = symbol.hashCode();
     }
-    
-    public OrderSide getSide() { return side; }
-    public void setSide(OrderSide side) { this.side = side; }
-    
-    public OrderType getType() { return type; }
-    public void setType(OrderType type) { this.type = type; }
-    
-    public long getPrice() { return price; }
-    public void setPrice(long price) { this.price = price; }
-    
-    public long getQuantity() { return quantity; }
-    public void setQuantity(long quantity) { this.quantity = quantity; }
-    
-    public long getTimestamp() { return timestamp; }
-    public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
-    
-    public int getSymbolHash() { return symbolHash; }
-    
+
     @Override
     public String toString() {
         return String.format("Order{id=%d, symbol='%s', side=%s, type=%s, price=%d, qty=%d, time=%d}",

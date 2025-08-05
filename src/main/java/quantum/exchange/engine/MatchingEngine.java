@@ -1,5 +1,8 @@
 package quantum.exchange.engine;
 
+import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import quantum.exchange.memory.MmapOrderBookManager;
 import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.Order;
@@ -7,8 +10,6 @@ import quantum.exchange.model.MarketData;
 import quantum.exchange.orderbook.OrderBook;
 import quantum.exchange.queue.OrderQueue;
 import quantum.exchange.queue.TradeResultQueue;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Map;
@@ -16,12 +17,19 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 거래소의 핵심 매칭 엔진
+ * 주문을 처리하고 거래를 실행하는 단일 스레드 엔진이다.
+ */
+@Slf4j
+@RequiredArgsConstructor
 public class MatchingEngine implements Runnable {
-    private static final Logger logger = LoggerFactory.getLogger(MatchingEngine.class);
     
     private final MmapOrderBookManager memoryManager;
     private final InMemoryChronicleMapManager chronicleMapManager;
+    @Getter
     private OrderQueue orderQueue;
+    @Getter
     private TradeResultQueue tradeQueue;
     private final Map<String, OrderBook> orderBooks = new ConcurrentHashMap<>();
     private final Map<String, Integer> symbolIndexMap = new ConcurrentHashMap<>();
@@ -36,12 +44,6 @@ public class MatchingEngine implements Runnable {
     private volatile Thread processingThread;
     private int nextSymbolIndex = 0;
     
-    public MatchingEngine(MmapOrderBookManager memoryManager, InMemoryChronicleMapManager chronicleMapManager) {
-        this.memoryManager = memoryManager;
-        this.chronicleMapManager = chronicleMapManager;
-        this.orderQueue = null;
-        this.tradeQueue = null;
-    }
     
     public void initialize() {
         if (initialized.compareAndSet(false, true)) {
@@ -52,15 +54,15 @@ public class MatchingEngine implements Runnable {
                 this.orderQueue = new OrderQueue(memoryManager);
                 this.tradeQueue = new TradeResultQueue(memoryManager);
                 
-                addSymbol("BTC/USD");
-                addSymbol("ETH/USD");
-                addSymbol("BNB/USD");
-                addSymbol("ADA/USD");
-                addSymbol("SOL/USD");
+                addSymbol("BTC-USD");
+                addSymbol("ETH-USD");
+                addSymbol("BNB-USD");
+                addSymbol("ADA-USD");
+                addSymbol("SOL-USD");
                 
-                logger.info("MatchingEngine initialized with {} symbols", orderBooks.size());
-                logger.info("Order queue: {}", orderQueue);
-                logger.info("Trade queue: {}", tradeQueue);
+                log.info("매칭 엔진 초기화 완료: {} 개 심볼", orderBooks.size());
+                log.info("주문 큐: {}", orderQueue);
+                log.info("거래 큐: {}", tradeQueue);
                 
             } catch (Exception e) {
                 initialized.set(false);
@@ -78,7 +80,7 @@ public class MatchingEngine implements Runnable {
             memoryManager.setActive(true);
             processingThread = new Thread(this, "MatchingEngine-Thread");
             processingThread.start();
-            logger.info("MatchingEngine started");
+            log.info("매칭 엔진 시작됨");
         }
     }
     
@@ -93,23 +95,23 @@ public class MatchingEngine implements Runnable {
                     Thread.currentThread().interrupt();
                 }
             }
-            logger.info("MatchingEngine stopped");
+            log.info("매칭 엔진 중지됨");
         }
     }
     
     @Override
     public void run() {
-        logger.info("MatchingEngine processing thread started");
+        log.info("매칭 엔진 처리 스레드 시작됨");
         
         while (running.get() && !Thread.currentThread().isInterrupted()) {
             try {
                 processNextOrder();
             } catch (Exception e) {
-                logger.error("Error processing order", e);
+                log.error("주문 처리 중 오류 발생", e);
             }
         }
         
-        logger.info("MatchingEngine processing thread stopped");
+        log.info("매칭 엔진 처리 스레드 중지됨");
     }
     
     private void processNextOrder() {
@@ -138,13 +140,13 @@ public class MatchingEngine implements Runnable {
         try {
             String symbol = getSymbolFromHash(order.getSymbolHash());
             if (symbol == null) {
-                logger.warn("Unknown symbol hash: {}", order.getSymbolHash());
+                log.warn("알 수 없는 심볼 해시: {}", order.getSymbolHash());
                 return;
             }
             
             OrderBook orderBook = orderBooks.get(symbol);
             if (orderBook == null) {
-                logger.warn("No order book found for symbol: {}", symbol);
+                log.warn("심볼에 대한 호가창을 찾을 수 없음: {}", symbol);
                 return;
             }
             
@@ -211,7 +213,7 @@ public class MatchingEngine implements Runnable {
         }
         
         if (nextSymbolIndex >= quantum.exchange.memory.SharedMemoryLayout.MAX_SYMBOLS) {
-            logger.error("Maximum number of symbols reached: {}", quantum.exchange.memory.SharedMemoryLayout.MAX_SYMBOLS);
+            log.error("최대 심볼 수 도달: {}", quantum.exchange.memory.SharedMemoryLayout.MAX_SYMBOLS);
             return false;
         }
         
@@ -224,7 +226,7 @@ public class MatchingEngine implements Runnable {
         marketData.setSymbolHash(symbol.hashCode());
         marketDataMap.put(symbol, marketData);
         
-        logger.info("Added symbol: {} (index: {})", symbol, symbolIndex);
+        log.info("심볼 추가됨: {} (인덱스: {})", symbol, symbolIndex);
         return true;
     }
     
@@ -255,53 +257,26 @@ public class MatchingEngine implements Runnable {
     public boolean isInitialized() {
         return initialized.get();
     }
-    
-    public OrderQueue getOrderQueue() {
-        return orderQueue;
-    }
-    
-    public TradeResultQueue getTradeQueue() {
-        return tradeQueue;
-    }
-    
+
     public Map<String, OrderBook> getOrderBooks() {
         return Map.copyOf(orderBooks);
     }
-    
-    public static class EngineStatistics {
-        private final long processedOrders;
-        private final long processedTrades;
-        private final long lastProcessTime;
-        private final long orderQueueSize;
-        private final long tradeQueueSize;
-        private final int symbolCount;
-        private final boolean running;
-        
-        public EngineStatistics(long processedOrders, long processedTrades, long lastProcessTime,
-                               long orderQueueSize, long tradeQueueSize, int symbolCount, boolean running) {
-            this.processedOrders = processedOrders;
-            this.processedTrades = processedTrades;
-            this.lastProcessTime = lastProcessTime;
-            this.orderQueueSize = orderQueueSize;
-            this.tradeQueueSize = tradeQueueSize;
-            this.symbolCount = symbolCount;
-            this.running = running;
+
+        public record EngineStatistics(long processedOrders, long processedTrades, long lastProcessTime,
+                                       long orderQueueSize, long tradeQueueSize, int symbolCount, boolean running) {
+
+        public double getLastProcessTimeMs() {
+            return lastProcessTime / 1_000_000.0;
         }
-        
-        public long getProcessedOrders() { return processedOrders; }
-        public long getProcessedTrades() { return processedTrades; }
-        public long getLastProcessTime() { return lastProcessTime; }
-        public double getLastProcessTimeMs() { return lastProcessTime / 1_000_000.0; }
-        public double getLastProcessTimeMicros() { return lastProcessTime / 1_000.0; }
-        public long getOrderQueueSize() { return orderQueueSize; }
-        public long getTradeQueueSize() { return tradeQueueSize; }
-        public int getSymbolCount() { return symbolCount; }
-        public boolean isRunning() { return running; }
-        
-        @Override
-        public String toString() {
-            return String.format("EngineStats{orders=%d, trades=%d, lastProcess=%.2fμs, queueSize=%d, symbols=%d, running=%s}",
-                    processedOrders, processedTrades, getLastProcessTimeMicros(), orderQueueSize, symbolCount, running);
+
+        public double getLastProcessTimeMicros() {
+            return lastProcessTime / 1_000.0;
         }
-    }
+
+            @Override
+            public String toString() {
+                return String.format("EngineStats{orders=%d, trades=%d, lastProcess=%.2fμs, queueSize=%d, symbols=%d, running=%s}",
+                        processedOrders, processedTrades, getLastProcessTimeMicros(), orderQueueSize, symbolCount, running);
+            }
+        }
 }

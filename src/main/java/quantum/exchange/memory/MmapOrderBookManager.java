@@ -1,7 +1,6 @@
 package quantum.exchange.memory;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.File;
 import java.io.RandomAccessFile;
@@ -11,8 +10,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * 메모리 맵 파일을 사용한 호가창 매니저
+ * 고성능 거래 처리를 위해 메모리 맵 파일로 주문 데이터를 관리한다.
+ */
+@Slf4j
 public class MmapOrderBookManager implements AutoCloseable {
-    private static final Logger logger = LoggerFactory.getLogger(MmapOrderBookManager.class);
     
     private final String filePath;
     private RandomAccessFile file;
@@ -34,15 +37,15 @@ public class MmapOrderBookManager implements AutoCloseable {
                 
                 if (file.length() < SharedMemoryLayout.TOTAL_SIZE) {
                     file.setLength(SharedMemoryLayout.TOTAL_SIZE);
-                    logger.info("Extended file to {} bytes", SharedMemoryLayout.TOTAL_SIZE);
+                    log.info("파일 크기 확장: {} 바이트", SharedMemoryLayout.TOTAL_SIZE);
                 }
                 
                 buffer = channel.map(FileChannel.MapMode.READ_WRITE, 0, SharedMemoryLayout.TOTAL_SIZE);
                 
                 initializeHeader();
                 
-                logger.info("Memory-mapped file initialized: {}", filePath);
-                logger.info(SharedMemoryLayout.getLayoutInfo());
+                log.info("메모리 맵 파일 초기화 완료: {}", filePath);
+                log.info(SharedMemoryLayout.getLayoutInfo());
                 
             } catch (Exception e) {
                 isInitialized.set(false);
@@ -58,7 +61,7 @@ public class MmapOrderBookManager implements AutoCloseable {
         if (!parentDir.exists()) {
             boolean created = parentDir.mkdirs();
             if (!created) {
-                logger.warn("Could not create directories for path: {}", parentDir);
+                log.warn("디렉토리 생성 실패: {}", parentDir);
             }
         }
     }
@@ -75,9 +78,9 @@ public class MmapOrderBookManager implements AutoCloseable {
             buffer.putLong(SharedMemoryLayout.Header.STATUS_OFFSET, 1); // 1 = active
             
             buffer.force();
-            logger.info("Header initialized");
+            log.info("헤더 초기화 완료");
         } else {
-            logger.info("Header already initialized, skipping");
+            log.info("헤더가 이미 초기화됨, 건너뜀");
         }
     }
     
@@ -181,7 +184,7 @@ public class MmapOrderBookManager implements AutoCloseable {
     public void close() {
         if (isClosed.compareAndSet(false, true)) {
             cleanup();
-            logger.info("MmapOrderBookManager closed");
+            log.info("메모리 맵 호가창 매니저 종료");
         }
     }
     
@@ -200,7 +203,7 @@ public class MmapOrderBookManager implements AutoCloseable {
                 file = null;
             }
         } catch (Exception e) {
-            logger.error("Error during cleanup", e);
+            log.error("정리 작업 중 오류 발생", e);
         }
     }
     

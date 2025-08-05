@@ -1,7 +1,12 @@
 package quantum.exchange.model;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.nio.ByteBuffer;
 
+@Setter
+@Getter
 public class MarketData {
     public static final int BYTE_SIZE = Long.BYTES * 6 + Integer.BYTES;
     
@@ -66,28 +71,7 @@ public class MarketData {
     public long getSpread() {
         return bestAskPrice - bestBidPrice;
     }
-    
-    public int getSymbolHash() { return symbolHash; }
-    public void setSymbolHash(int symbolHash) { this.symbolHash = symbolHash; }
-    
-    public long getLastPrice() { return lastPrice; }
-    public void setLastPrice(long lastPrice) { this.lastPrice = lastPrice; }
-    
-    public long getLastQuantity() { return lastQuantity; }
-    public void setLastQuantity(long lastQuantity) { this.lastQuantity = lastQuantity; }
-    
-    public long getVolume24h() { return volume24h; }
-    public void setVolume24h(long volume24h) { this.volume24h = volume24h; }
-    
-    public long getBestBidPrice() { return bestBidPrice; }
-    public void setBestBidPrice(long bestBidPrice) { this.bestBidPrice = bestBidPrice; }
-    
-    public long getBestAskPrice() { return bestAskPrice; }
-    public void setBestAskPrice(long bestAskPrice) { this.bestAskPrice = bestAskPrice; }
-    
-    public long getTimestamp() { return timestamp; }
-    public void setTimestamp(long timestamp) { this.timestamp = timestamp; }
-    
+
     @Override
     public String toString() {
         return String.format("MarketData{symbol=%d, last=%d, qty=%d, vol=%d, bid=%d, ask=%d, spread=%d}",

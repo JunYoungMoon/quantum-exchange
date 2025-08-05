@@ -46,7 +46,7 @@ A professional-grade cryptocurrency exchange matching engine built with Java, fe
 │  │ │                         Price Levels                                     │ │ │
 │  │ │                      (458MB Order Book)                                  │ │ │
 │  │ │ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐ ┌──────────────┐     │ │ │
-│  │ │ │ BTC/USD Bids │ │ BTC/USD Asks │ │ ETH/USD Bids │ │ ETH/USD Asks │ ... │ │ │
+│  │ │ │ BTC-USD Bids │ │ BTC-USD Asks │ │ ETH-USD Bids │ │ ETH-USD Asks │ ... │ │ │
 │  │ │ └──────────────┘ └──────────────┘ └──────────────┘ └──────────────┘     │ │ │
 │  │ └───────────────────────────────────────────────────────────────────────────┘ │ │
 │  └─────────────────────────────────────────────────────────────────────────────┘ │
@@ -90,7 +90,7 @@ Data Flow:
 │ ┌─────────────────────────────────────────────────────────────────────────────┐ │
 │ │ POST /api/v1/exchange/orders/limit                                          │ │
 │ │ {                                                                           │ │
-│ │   "symbol": "BTC/USD",                                                      │ │
+│ │   "symbol": "BTC-USD",                                                      │ │
 │ │   "side": "BUY",                                                            │ │
 │ │   "price": 50000,                                                           │ │
 │ │   "quantity": 10                                                            │ │
@@ -682,26 +682,26 @@ The exchange will start on `http://localhost:8080`
 ```bash
 curl -X POST http://localhost:8080/api/v1/exchange/orders/market \
   -H "Content-Type: application/json" \
-  -d '{"symbol":"BTC/USD","side":"BUY","quantity":10}'
+  -d '{"symbol":"BTC-USD","side":"BUY","quantity":10}'
 ```
 
 **Limit Order:**
 ```bash
 curl -X POST http://localhost:8080/api/v1/exchange/orders/limit \
   -H "Content-Type: application/json" \
-  -d '{"symbol":"BTC/USD","side":"BUY","price":50000,"quantity":10}'
+  -d '{"symbol":"BTC-USD","side":"BUY","price":50000,"quantity":10}'
 ```
 
 ### Market Data
 
 **Order Book:**
 ```bash
-curl http://localhost:8080/api/v1/exchange/orderbook/BTC/USD
+curl http://localhost:8080/api/v1/exchange/orderbook/BTC-USD
 ```
 
 **Market Data:**
 ```bash
-curl http://localhost:8080/api/v1/exchange/market-data/BTC/USD
+curl http://localhost:8080/api/v1/exchange/market-data/BTC-USD
 ```
 
 **Exchange Status:**

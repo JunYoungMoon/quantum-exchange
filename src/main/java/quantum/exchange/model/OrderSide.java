@@ -1,5 +1,8 @@
 package quantum.exchange.model;
 
+import lombok.Getter;
+
+@Getter
 public enum OrderSide {
     BUY(0),
     SELL(1);
@@ -9,11 +12,7 @@ public enum OrderSide {
     OrderSide(int value) {
         this.value = value;
     }
-    
-    public int getValue() {
-        return value;
-    }
-    
+
     public static OrderSide fromValue(int value) {
         return switch (value) {
             case 0 -> BUY;

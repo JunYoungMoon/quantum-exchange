@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class MatchingEngineTest {
     
     private static final String TEST_MMAP_FILE = "./test-data/engine-test.mmap";
-    private static final String TEST_SYMBOL = "BTC/USD";
+    private static final String TEST_SYMBOL = "BTC-USD";
     
     private MmapOrderBookManager memoryManager;
     private InMemoryChronicleMapManager chronicleMapManager;
@@ -154,7 +154,7 @@ public class MatchingEngineTest {
     @Test
     void testEngineStatistics() throws Exception {
         var initialStats = matchingEngine.getStatistics();
-        assertTrue(initialStats.isRunning());
+        assertTrue(initialStats.running());
         
         Order order = new Order(1, TEST_SYMBOL, OrderSide.BUY, OrderType.LIMIT, 50000, 10, System.nanoTime());
         assertTrue(matchingEngine.submitOrder(order));
@@ -162,13 +162,13 @@ public class MatchingEngineTest {
         // Wait for order to be processed
         int maxWait = 10;
         int waited = 0;
-        while (matchingEngine.getStatistics().getProcessedOrders() == 0 && waited < maxWait) {
+        while (matchingEngine.getStatistics().processedOrders() == 0 && waited < maxWait) {
             Thread.sleep(10);
             waited++;
         }
         
         var stats = matchingEngine.getStatistics();
-        assertTrue(stats.getProcessedOrders() > 0, "Should have processed at least one order");
+        assertTrue(stats.processedOrders() > 0, "Should have processed at least one order");
     }
     
     @Test
