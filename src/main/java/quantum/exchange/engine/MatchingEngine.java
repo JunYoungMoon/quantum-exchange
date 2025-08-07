@@ -8,8 +8,8 @@ import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.Order;
 import quantum.exchange.model.MarketData;
 import quantum.exchange.orderbook.OrderBook;
-import quantum.exchange.queue.OrderQueue;
-import quantum.exchange.queue.TradeResultQueue;
+import quantum.exchange.queue.*;
+import quantum.exchange.config.QueueConfiguration;
 
 import java.util.List;
 import java.util.Map;
@@ -27,10 +27,11 @@ public class MatchingEngine implements Runnable {
     
     private final MmapOrderBookManager memoryManager;
     private final InMemoryChronicleMapManager chronicleMapManager;
+    private final QueueConfiguration queueConfig;
     @Getter
-    private OrderQueue orderQueue;
+    private OrderQueueInterface orderQueue;
     @Getter
-    private TradeResultQueue tradeQueue;
+    private TradeResultQueueInterface tradeQueue;
     private final Map<String, OrderBook> orderBooks = new ConcurrentHashMap<>();
     private final Map<String, Integer> symbolIndexMap = new ConcurrentHashMap<>();
     private final Map<String, MarketData> marketDataMap = new ConcurrentHashMap<>();
@@ -51,8 +52,8 @@ public class MatchingEngine implements Runnable {
                 memoryManager.initialize();
                 chronicleMapManager.initialize();
                 
-                this.orderQueue = new OrderQueue(memoryManager);
-                this.tradeQueue = new TradeResultQueue(memoryManager);
+                this.orderQueue = QueueFactory.createOrderQueue(queueConfig);
+                this.tradeQueue = QueueFactory.createTradeResultQueue(queueConfig, memoryManager);
                 
                 addSymbol("BTC-USD");
                 addSymbol("ETH-USD");

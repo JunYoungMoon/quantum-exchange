@@ -7,7 +7,7 @@ import quantum.exchange.model.OrderSide;
 import quantum.exchange.model.OrderType;
 import quantum.exchange.model.PriceLevel;
 import quantum.exchange.model.Trade;
-import quantum.exchange.queue.TradeResultQueue;
+import quantum.exchange.queue.TradeResultQueueInterface;
 import lombok.extern.slf4j.Slf4j;
 
 import java.nio.MappedByteBuffer;
@@ -26,7 +26,7 @@ public class OrderBook {
     private final int symbolHash;
     private final InMemoryChronicleMapManager chronicleMapManager;
     private final MappedByteBuffer buffer;
-    private final TradeResultQueue tradeQueue;
+    private final TradeResultQueueInterface tradeQueue;
     
     private final TreeMap<Long, PriceLevel> bidLevels = new TreeMap<>(Collections.reverseOrder());
     private final TreeMap<Long, PriceLevel> askLevels = new TreeMap<>();
@@ -37,7 +37,7 @@ public class OrderBook {
     private volatile long bestBidPrice = 0;
     private volatile long bestAskPrice = Long.MAX_VALUE;
     
-    public OrderBook(String symbol, int symbolIndex, InMemoryChronicleMapManager chronicleMapManager, MappedByteBuffer buffer, TradeResultQueue tradeQueue) {
+    public OrderBook(String symbol, int symbolIndex, InMemoryChronicleMapManager chronicleMapManager, MappedByteBuffer buffer, TradeResultQueueInterface tradeQueue) {
         this.symbol = symbol;
         this.symbolIndex = symbolIndex;
         this.symbolHash = symbol.hashCode();

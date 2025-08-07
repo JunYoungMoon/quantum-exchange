@@ -6,6 +6,7 @@ import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.Order;
 import quantum.exchange.model.OrderSide;
 import quantum.exchange.model.OrderType;
+import quantum.exchange.config.QueueConfiguration;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.AfterEach;
@@ -31,10 +32,15 @@ public class PerformanceBenchmark {
     @BeforeEach
     void setUp() throws Exception {
         java.nio.file.Files.createDirectories(java.nio.file.Paths.get("./test-data"));
+        java.nio.file.Files.createDirectories(java.nio.file.Paths.get("./test-data/orders"));
+        java.nio.file.Files.createDirectories(java.nio.file.Paths.get("./test-data/trades"));
         
         memoryManager = new MmapOrderBookManager(TEST_MMAP_FILE);
         chronicleMapManager = new InMemoryChronicleMapManager();
-        matchingEngine = new MatchingEngine(memoryManager, chronicleMapManager);
+        QueueConfiguration queueConfig = new QueueConfiguration();
+        queueConfig.setOrderQueuePath("./test-data/orders");
+        queueConfig.setTradeQueuePath("./test-data/trades");
+        matchingEngine = new MatchingEngine(memoryManager, chronicleMapManager, queueConfig);
         matchingEngine.initialize();
         matchingEngine.start();
         

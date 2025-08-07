@@ -1,0 +1,15 @@
+server:
+  port: 8080
+
+quantum:
+  exchange:
+    mmap-file-path: "./data/exchange-dev.mmap"
+    queue:
+      order-queue-path: "./data/queues-dev/orders"
+      trade-queue-path: "./data/queues-dev/trades"
+
+logging:
+  level:
+    quantum.exchange: DEBUG
+    net.openhft: INFO
+    root: INFO

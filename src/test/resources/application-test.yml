@@ -1,0 +1,15 @@
+server:
+  port: 0
+
+quantum:
+  exchange:
+    mmap-file-path: "./test-data/test.mmap"
+    queue:
+      order-queue-path: "./test-data/orders"
+      trade-queue-path: "./test-data/trades"
+
+logging:
+  level:
+    quantum.exchange: WARN
+    net.openhft: WARN
+    root: WARN

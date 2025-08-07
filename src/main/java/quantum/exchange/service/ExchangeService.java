@@ -8,7 +8,9 @@ import quantum.exchange.memory.MmapOrderBookManager;
 import quantum.exchange.memory.InMemoryChronicleMapManager;
 import quantum.exchange.model.*;
 import quantum.exchange.orderbook.OrderBook;
+import quantum.exchange.config.QueueConfiguration;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -31,6 +33,9 @@ public class ExchangeService {
     private MatchingEngine matchingEngine;
     private final AtomicLong orderIdGenerator = new AtomicLong(1);
     
+    @Autowired
+    private QueueConfiguration queueConfiguration;
+    
     /**
      * 거래소 서비스를 초기화한다.
      * 메모리 매니저, 크로니클 맵, 매칭 엔진을 설정한다.
@@ -42,7 +47,7 @@ public class ExchangeService {
             
             memoryManager = new MmapOrderBookManager(MMAP_FILE_PATH);
             chronicleMapManager = new InMemoryChronicleMapManager();
-            matchingEngine = new MatchingEngine(memoryManager, chronicleMapManager);
+            matchingEngine = new MatchingEngine(memoryManager, chronicleMapManager, queueConfiguration);
             
             matchingEngine.initialize();
             matchingEngine.start();

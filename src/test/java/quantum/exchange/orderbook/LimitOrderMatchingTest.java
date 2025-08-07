@@ -8,7 +8,8 @@ import quantum.exchange.model.Order;
 import quantum.exchange.model.OrderSide;
 import quantum.exchange.model.OrderType;
 import quantum.exchange.model.PriceLevel;
-import quantum.exchange.queue.TradeResultQueue;
+import quantum.exchange.queue.TradeResultQueueInterface;
+import quantum.exchange.queue.ChronicleTradeResultQueue;
 import quantum.exchange.memory.MmapOrderBookManager;
 
 import java.nio.ByteBuffer;
@@ -24,7 +25,7 @@ public class LimitOrderMatchingTest {
     private OrderBook orderBook;
     private InMemoryChronicleMapManager chronicleMapManager;
     private MmapOrderBookManager memoryManager;
-    private TradeResultQueue tradeQueue;
+    private TradeResultQueueInterface tradeQueue;
     
     @BeforeEach
     void setUp() throws Exception {
@@ -34,7 +35,7 @@ public class LimitOrderMatchingTest {
         memoryManager = new MmapOrderBookManager("./test-data/test.mmap");
         memoryManager.initialize();
         
-        tradeQueue = new TradeResultQueue(memoryManager);
+        tradeQueue = new ChronicleTradeResultQueue("./test-data/trades", memoryManager);
         ByteBuffer byteBuffer = memoryManager.getBuffer();
         
         orderBook = new OrderBook("BTC-USD", 0, chronicleMapManager, (java.nio.MappedByteBuffer) byteBuffer, tradeQueue);
